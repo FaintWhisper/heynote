@@ -12,6 +12,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var isOpening = false
     @Published private(set) var hasConflict = false
     @Published private(set) var cloudConflict = false
+    @Published private(set) var folderVersion = UUID()
+    @Published private(set) var searchHits: [BufferSearchHit] = []
+    @Published private(set) var searchFailures: [BufferSearchFailure] = []
+    @Published private(set) var isSearching = false
+    @Published private(set) var searchedFiles = 0
+    @Published private(set) var searchFileCount = 0
+    @Published private(set) var searchQuery = ""
+    @Published private(set) var searchError: String?
     @Published var message: String?
 
     private let repository = FolderRepository()
@@ -20,14 +28,15 @@ final class AppModel: ObservableObject {
     private var autosave: Task<Void, Never>?
     private var refreshInProgress = false
     private var foreground = true
+    private var searchToken = UUID()
 
     var title: String { document?.title ?? activeID.map { (($0 as NSString).lastPathComponent as NSString).deletingPathExtension } ?? "HeyNote" }
     var busy: Bool { isSaving || isOpening }
-    var saveStatus: String {
+    var saveStatus: String? {
         if hasConflict { return "Sync conflict · edits kept on this device" }
         if isSaving { return "Saving…" }
         if dirty { return message == nil ? "Unsaved changes" : "Save paused · tap Save to retry" }
-        return "Saved to folder"
+        return nil
     }
 
     func start() async {
@@ -35,6 +44,7 @@ final class AppModel: ObservableObject {
         defer { isOpening = false }
         do {
             folderName = try await repository.restore()
+            folderVersion = UUID()
             if folderName != nil { buffers = try await repository.scan() }
         } catch { message = error.localizedDescription }
     }
@@ -47,6 +57,8 @@ final class AppModel: ObservableObject {
         guard !dirty else { return }
         do {
             folderName = try await repository.connect(url)
+            clearSearch()
+            folderVersion = UUID()
             document = nil
             activeID = nil
             buffers = []
@@ -85,6 +97,54 @@ final class AppModel: ObservableObject {
 
     func text(for id: UUID) -> String {
         document?.blocks.first(where: { $0.id == id })?.text ?? ""
+    }
+
+    private func clearSearch() {
+        searchToken = UUID()
+        searchHits = []
+        searchFailures = []
+        searchError = nil
+        isSearching = false
+        searchedFiles = 0
+        searchFileCount = 0
+        searchQuery = ""
+    }
+
+    func searchAll(_ input: String) async {
+        clearSearch()
+        let query = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        searchQuery = query
+        guard !query.isEmpty, folderName != nil else { return }
+        let token = searchToken
+        isSearching = true
+        defer { if searchToken == token { isSearching = false } }
+        do {
+            try await Task.sleep(nanoseconds: 350_000_000)
+            try Task.checkCancellation()
+            let local: BufferSearchOverride?
+            if dirty, let id = activeID, let document {
+                local = BufferSearchOverride(id: id, data: try document.data(forSaving: false))
+            } else {
+                local = nil
+            }
+            let report = try await repository.search(query, overriding: local) { [weak self] done, total in
+                await self?.updateSearchProgress(done, total: total, token: token)
+            }
+            try Task.checkCancellation()
+            guard searchToken == token else { return }
+            searchHits = report.hits
+            searchFailures = report.failures
+        } catch is CancellationError {
+            // A new query or folder selection owns the search state.
+        } catch {
+            if searchToken == token { searchError = error.localizedDescription }
+        }
+    }
+
+    private func updateSearchProgress(_ done: Int, total: Int, token: UUID) {
+        guard searchToken == token else { return }
+        searchedFiles = done
+        searchFileCount = total
     }
 
     func updateText(_ text: String, id: UUID) {
@@ -174,7 +234,11 @@ final class AppModel: ObservableObject {
         refreshInProgress = true
         defer { refreshInProgress = false }
         do {
-            buffers = try await repository.scan()
+            let scanned = try await repository.scan()
+            if buffers != scanned {
+                buffers = scanned
+                folderVersion = UUID()
+            }
             guard !busy, let id = activeID, let previous = document else { return }
             let expectedBaseline = baseline
             let remote = try await repository.read(id)

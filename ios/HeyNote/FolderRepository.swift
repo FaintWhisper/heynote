@@ -116,6 +116,46 @@ actor FolderRepository {
         }
     }
 
+    func search(_ query: String, overriding local: BufferSearchOverride?,
+                progress: @Sendable (Int, Int) async -> Void) async throws -> BufferSearchReport {
+        let selectedFolder = folder
+        var entries = try scan()
+        if let local, !entries.contains(where: { $0.id == local.id }) {
+            entries.append(BufferEntry(id: local.id, modified: nil, size: local.data.count))
+        }
+        var report = BufferSearchReport()
+        await progress(0, entries.count)
+        for (fileIndex, entry) in entries.enumerated() {
+            try Task.checkCancellation()
+            guard folder == selectedFolder else { throw CancellationError() }
+            do {
+                let note: NoteDocument
+                if let local, local.id == entry.id {
+                    note = try NoteDocument(data: local.data)
+                } else {
+                    note = try read(entry.id).document
+                }
+                for (index, block) in note.blocks.enumerated() {
+                    try Task.checkCancellation()
+                    guard let match = block.text.bufferMatch(query) else { continue }
+                    report.hits.append(BufferSearchHit(bufferID: entry.id, bufferName: note.title ?? entry.name,
+                                                       blockIndex: index, delimiter: block.delimiter, language: block.language,
+                                                       excerpt: block.text.searchExcerpt(around: match)))
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                report.failures.append(BufferSearchFailure(id: entry.id, message: error.localizedDescription))
+            }
+            await progress(fileIndex + 1, entries.count)
+            // Let editing and saves proceed between files instead of retaining
+            // the repository actor throughout a large library search.
+            await Task.yield()
+        }
+        try Task.checkCancellation()
+        return report
+    }
+
     func write(_ id: String, data: Data, expectedDigest: String?) throws -> String {
         try withFolder { folder in
             let url = try fileURL(id, in: folder)
