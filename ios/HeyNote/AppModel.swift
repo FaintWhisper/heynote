@@ -119,7 +119,7 @@ final class AppModel: ObservableObject {
         isSearching = true
         defer { if searchToken == token { isSearching = false } }
         do {
-            try await Task.sleep(nanoseconds: 350_000_000)
+            try await Task.sleep(nanoseconds: 180_000_000)
             try Task.checkCancellation()
             let local: BufferSearchOverride?
             if dirty, let id = activeID, let document {
@@ -127,8 +127,8 @@ final class AppModel: ObservableObject {
             } else {
                 local = nil
             }
-            let report = try await repository.search(query, overriding: local) { [weak self] done, total in
-                await self?.updateSearchProgress(done, total: total, token: token)
+            let report = try await repository.search(query, overriding: local) { [weak self] done, total, partial in
+                await self?.updateSearchProgress(done, total: total, report: partial, token: token)
             }
             try Task.checkCancellation()
             guard searchToken == token else { return }
@@ -141,10 +141,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func updateSearchProgress(_ done: Int, total: Int, token: UUID) {
+    private func updateSearchProgress(_ done: Int, total: Int, report: BufferSearchReport, token: UUID) {
         guard searchToken == token else { return }
         searchedFiles = done
         searchFileCount = total
+        searchHits = report.hits
+        searchFailures = report.failures
+    }
+
+    func refreshSearch() async {
+        await repository.clearSearchCache()
+        await refresh()
     }
 
     func updateText(_ text: String, id: UUID) {

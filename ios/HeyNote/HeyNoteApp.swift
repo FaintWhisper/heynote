@@ -125,7 +125,7 @@ private struct LibraryScreen: View {
         .listStyle(.insetGrouped)
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search names and contents")
         .refreshable {
-            await model.refresh()
+            await model.refreshSearch()
             searchReload = UUID()
         }
     }

@@ -1,12 +1,15 @@
 import Foundation
 import CryptoKit
 
-struct BufferEntry: Identifiable, Hashable {
+struct BufferEntry: Identifiable, Hashable, Sendable {
     let id: String
     let modified: Date?
     let size: Int
     var name: String { ((id as NSString).lastPathComponent as NSString).deletingPathExtension }
     var directory: String { (id as NSString).deletingLastPathComponent }
+    var searchStamp: BufferSearchStamp? {
+        modified.map { BufferSearchStamp(modified: $0, size: size) }
+    }
 
     static func precedes(_ first: BufferEntry, _ second: BufferEntry, oldestFirst: Bool) -> Bool {
         switch (first.modified, second.modified) {
@@ -41,6 +44,11 @@ actor FolderRepository {
     private var folder: URL?
     private let bookmarkKey = "HeyNote.selectedFolder.v1"
     private let manager = FileManager.default
+    private var searchCache: [String: BufferSearchCacheEntry] = [:]
+    private var searchCacheCost = 0
+    private var searchCacheClock: UInt64 = 0
+    private var searchCacheGeneration = UUID()
+    private let searchCacheBudget = 32 * 1024 * 1024
 
     static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -58,6 +66,7 @@ actor FolderRepository {
         defer { url.stopAccessingSecurityScopedResource() }
         guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw NoteError.invalidPath }
         let bookmark = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+        clearSearchCache()
         folder = url
         UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
         return url.lastPathComponent
@@ -70,7 +79,7 @@ actor FolderRepository {
         return try action(folder)
     }
 
-    private func fileURL(_ id: String, in folder: URL) throws -> URL {
+    nonisolated static func bufferURL(_ id: String, in folder: URL) throws -> URL {
         let components = id.split(separator: "/", omittingEmptySubsequences: false)
         guard !components.isEmpty, components.allSatisfy({ !$0.isEmpty && $0 != ".." && $0 != "." }),
               !id.contains("\\"), id.lowercased().hasSuffix(".txt") else { throw NoteError.invalidPath }
@@ -111,7 +120,7 @@ actor FolderRepository {
 
     func read(_ id: String) throws -> BufferSnapshot {
         try withFolder { folder in
-            let url = try fileURL(id, in: folder)
+            let url = try Self.bufferURL(id, in: folder)
             var result: Result<BufferSnapshot, Error>?
             var coordinationError: NSError?
             NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinated in
@@ -127,49 +136,92 @@ actor FolderRepository {
         }
     }
 
+    func clearSearchCache() {
+        searchCache.removeAll()
+        searchCacheCost = 0
+        searchCacheGeneration = UUID()
+    }
+
+    private func evictSearchIndex(_ id: String) {
+        if let removed = searchCache.removeValue(forKey: id) { searchCacheCost -= removed.index.cost }
+    }
+
+    private func cacheSearchIndex(_ index: BufferSearchIndex, entry: BufferEntry) {
+        guard let stamp = entry.searchStamp, index.sourceBytes == entry.size, index.cost <= searchCacheBudget else { return }
+        evictSearchIndex(entry.id)
+        while searchCacheCost + index.cost > searchCacheBudget,
+              let oldest = searchCache.min(by: { $0.value.lastUse < $1.value.lastUse })?.key {
+            evictSearchIndex(oldest)
+        }
+        searchCacheClock &+= 1
+        searchCache[entry.id] = BufferSearchCacheEntry(stamp: stamp, index: index, lastUse: searchCacheClock)
+        searchCacheCost += index.cost
+    }
+
     func search(_ query: String, overriding local: BufferSearchOverride?,
-                progress: @Sendable (Int, Int) async -> Void) async throws -> BufferSearchReport {
-        let selectedFolder = folder
+                progress: @Sendable (Int, Int, BufferSearchReport) async -> Void) async throws -> BufferSearchReport {
+        try Task.checkCancellation()
+        guard let selectedFolder = folder else { throw NoteError.noFolder }
         var entries = try scan()
         if let local, !entries.contains(where: { $0.id == local.id }) {
             entries.append(BufferEntry(id: local.id, modified: nil, size: local.data.count))
         }
-        var report = BufferSearchReport()
-        await progress(0, entries.count)
-        for (fileIndex, entry) in entries.enumerated() {
-            try Task.checkCancellation()
-            guard folder == selectedFolder else { throw CancellationError() }
-            do {
-                let note: NoteDocument
-                if let local, local.id == entry.id {
-                    note = try NoteDocument(data: local.data)
-                } else {
-                    note = try read(entry.id).document
-                }
-                for (index, block) in note.blocks.enumerated() {
-                    try Task.checkCancellation()
-                    guard let match = block.text.bufferMatch(query) else { continue }
-                    report.hits.append(BufferSearchHit(bufferID: entry.id, bufferName: note.title ?? entry.name,
-                                                       blockIndex: index, delimiter: block.delimiter, language: block.language,
-                                                       excerpt: block.text.searchExcerpt(around: match)))
-                }
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                report.failures.append(BufferSearchFailure(id: entry.id, message: error.localizedDescription))
-            }
-            await progress(fileIndex + 1, entries.count)
-            // Let editing and saves proceed between files instead of retaining
-            // the repository actor throughout a large library search.
-            await Task.yield()
+        let entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        let validIDs = Set(entriesByID.keys)
+        for id in Array(searchCache.keys) where !validIDs.contains(id) { evictSearchIndex(id) }
+        let generation = searchCacheGeneration
+        let jobs = entries.map { entry -> BufferSearchJob in
+            let cached = searchCache[entry.id]
+            let sameVersion = entry.searchStamp != nil && cached?.stamp == entry.searchStamp
+            if !sameVersion { evictSearchIndex(entry.id) }
+            let localData = local?.id == entry.id ? local?.data : nil
+            return BufferSearchJob(entry: entry, folder: selectedFolder,
+                                   cached: localData == nil && sameVersion ? cached?.index : nil, local: localData)
         }
+        let largest = entries.map(\.size).max() ?? 0
+        let memoryLimit = largest > 32 * 1024 * 1024 ? 1 : (largest > 16 * 1024 * 1024 ? 2 : 4)
+        let concurrency = min(memoryLimit, max(1, ProcessInfo.processInfo.activeProcessorCount))
+        var report = BufferSearchReport()
+        await progress(0, entries.count, report)
         try Task.checkCancellation()
-        return report
+        guard folder == selectedFolder, searchCacheGeneration == generation else { throw CancellationError() }
+        return try await withThrowingTaskGroup(of: BufferSearchFileResult.self) { group in
+            var nextJob = 0
+            for _ in 0..<min(concurrency, jobs.count) {
+                let job = jobs[nextJob]
+                nextJob += 1
+                group.addTask { try await BufferSearchWorker.run(job, query: query) }
+            }
+            var completed = 0
+            while let result = try await group.next() {
+                try Task.checkCancellation()
+                guard folder == selectedFolder, searchCacheGeneration == generation else {
+                    group.cancelAll()
+                    throw CancellationError()
+                }
+                if let index = result.index, result.id != local?.id,
+                   let entry = entriesByID[result.id] {
+                    cacheSearchIndex(index, entry: entry)
+                }
+                report.hits.append(contentsOf: result.report.hits)
+                report.failures.append(contentsOf: result.report.failures)
+                completed += 1
+                await progress(completed, entries.count, report)
+                if nextJob < jobs.count {
+                    let job = jobs[nextJob]
+                    nextJob += 1
+                    group.addTaskUnlessCancelled { try await BufferSearchWorker.run(job, query: query) }
+                }
+            }
+            try Task.checkCancellation()
+            guard folder == selectedFolder, searchCacheGeneration == generation else { throw CancellationError() }
+            return report
+        }
     }
 
     func write(_ id: String, data: Data, expectedDigest: String?) throws -> String {
         try withFolder { folder in
-            let url = try fileURL(id, in: folder)
+            let url = try Self.bufferURL(id, in: folder)
             var result: Result<String, Error>?
             var coordinationError: NSError?
             NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { coordinated in
@@ -187,7 +239,10 @@ actor FolderRepository {
             }
             if let coordinationError { throw coordinationError }
             guard let result else { throw NoteError.coordination }
-            return try result.get()
+            let digest = try result.get()
+            evictSearchIndex(id)
+            searchCacheGeneration = UUID()
+            return digest
         }
     }
 

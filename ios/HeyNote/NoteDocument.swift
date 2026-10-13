@@ -26,7 +26,7 @@ enum NoteError: LocalizedError {
     }
 }
 
-struct NoteBlock: Identifiable {
+struct NoteBlock: Identifiable, Sendable {
     var id = UUID()
     var delimiter: String
     var token: String
