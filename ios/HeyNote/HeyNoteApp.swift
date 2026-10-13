@@ -258,17 +258,38 @@ private struct BufferScreen: View {
 private struct BlockEditor: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) var dismiss
-    let id: UUID
+    @State private var currentID: UUID
+    @State private var scrollRequest: EditorScrollRequest?
     private let languages = ["text", "markdown", "math", "javascript", "jsx", "typescript", "tsx", "json", "python", "html", "css", "sql", "xml", "yaml", "toml", "shell", "powershell", "swift", "rust", "cpp", "csharp", "java", "golang", "ruby", "php", "clojure", "elixir", "erlang", "kotlin", "lua", "groovy", "diff", "vue", "dart", "scala", "mermaid", "lezer"]
-    private var block: NoteBlock? { model.document?.blocks.first(where: { $0.id == id }) }
+    private var block: NoteBlock? { model.document?.blocks.first(where: { $0.id == currentID }) }
+    private var blockIndex: Int? { model.document?.blocks.firstIndex(where: { $0.id == currentID }) }
+
+    init(id: UUID) { _currentID = State(initialValue: id) }
+
+    private var editor: some View {
+        // Capture the displayed ID so a delegate callback during a transition
+        // always belongs to the block whose text was in the native editor.
+        let id = currentID
+        return NativeTextEditor(text: Binding(get: { model.text(for: id) }, set: { model.updateText($0, id: id) }),
+                                blockID: id, scrollRequest: scrollRequest)
+            .disabled(model.isOpening)
+    }
+
+    private func navigate(_ direction: Int, toEnd: Bool) {
+        guard !model.isOpening, let blocks = model.document?.blocks,
+              let index = blockIndex, !blocks.isEmpty else { return }
+        let target = toEnd ? (direction < 0 ? 0 : blocks.count - 1) : min(max(index + direction, 0), blocks.count - 1)
+        guard target != index || toEnd else { return }
+        currentID = blocks[target].id
+        scrollRequest = EditorScrollRequest(edge: toEnd && direction > 0 ? .bottom : .top)
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 MessageBanner()
                 if block != nil {
-                    NativeTextEditor(text: Binding(get: { model.text(for: id) }, set: { model.updateText($0, id: id) }))
-                        .disabled(model.isOpening)
+                    editor
                 } else {
                     Text("This block changed in iCloud Drive. Close the editor and reopen it.")
                         .foregroundStyle(.secondary).padding()
@@ -280,7 +301,7 @@ private struct BlockEditor: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
                         ForEach(languages, id: \.self) { language in
-                            Button(language.capitalized) { model.setLanguage(language, id: id) }
+                            Button(language.capitalized) { model.setLanguage(language, id: currentID) }
                         }
                     } label: { Image(systemName: "curlybraces") }
                         .accessibilityLabel("Block language").disabled(block == nil || model.isOpening)
@@ -290,10 +311,80 @@ private struct BlockEditor: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Text(model.saveStatus).font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(12).background(.bar)
+                VStack(spacing: 0) {
+                    HStack {
+                        BlockNavigationArrow(symbol: "arrow.up", label: "Previous block", jumpLabel: "Jump to first block and scroll to top",
+                                             enabled: block != nil && !model.isOpening,
+                                             tap: { navigate(-1, toEnd: false) }, hold: { navigate(-1, toEnd: true) })
+                            .frame(width: 44, height: 44)
+                        Spacer()
+                        Text(blockIndex.map { "Block \($0 + 1) of \(model.document?.blocks.count ?? 0)" } ?? "Block unavailable")
+                            .font(.caption.monospacedDigit())
+                        Spacer()
+                        BlockNavigationArrow(symbol: "arrow.down", label: "Next block", jumpLabel: "Jump to last block and scroll to bottom",
+                                             enabled: block != nil && !model.isOpening,
+                                             tap: { navigate(1, toEnd: false) }, hold: { navigate(1, toEnd: true) })
+                            .frame(width: 44, height: 44)
+                    }
+                    Text(model.saveStatus).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        .padding(.horizontal, 12).padding(.bottom, 8)
+                }.padding(.horizontal, 8).background(.bar)
             }
         }.interactiveDismissDisabled(model.isOpening)
+    }
+}
+
+private struct BlockNavigationArrow: UIViewRepresentable {
+    let symbol: String
+    let label: String
+    let jumpLabel: String
+    let enabled: Bool
+    let tap: () -> Void
+    let hold: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)), for: .normal)
+        button.tintColor = UIColor(red: 0.16, green: 0.58, blue: 0.42, alpha: 1)
+        button.accessibilityLabel = label
+        button.accessibilityHint = "Tap to move one block. Touch and hold to jump to the \(symbol == "arrow.up" ? "top" : "bottom") of the buffer."
+        button.accessibilityCustomActions = [UIAccessibilityCustomAction(name: jumpLabel, target: context.coordinator, selector: #selector(Coordinator.accessibilityJump(_:)))]
+        button.addTarget(context.coordinator, action: #selector(Coordinator.touchDown), for: .touchDown)
+        button.addTarget(context.coordinator, action: #selector(Coordinator.tapped), for: .touchUpInside)
+        let press = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.longPressed(_:)))
+        press.minimumPressDuration = 0.45
+        press.cancelsTouchesInView = true
+        button.addGestureRecognizer(press)
+        return button
+    }
+
+    func updateUIView(_ button: UIButton, context: Context) {
+        context.coordinator.parent = self
+        button.isEnabled = enabled
+    }
+
+    final class Coordinator: NSObject {
+        var parent: BlockNavigationArrow
+        private var didHold = false
+        init(parent: BlockNavigationArrow) { self.parent = parent }
+        @objc func touchDown() { didHold = false }
+        @objc func tapped() {
+            guard parent.enabled, !didHold else { return }
+            parent.tap()
+        }
+        @objc func longPressed(_ press: UILongPressGestureRecognizer) {
+            guard press.state == .began, parent.enabled else { return }
+            didHold = true
+            parent.hold()
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        @objc func accessibilityJump(_ action: UIAccessibilityCustomAction) -> Bool {
+            guard parent.enabled else { return false }
+            parent.hold()
+            return true
+        }
     }
 }
 
@@ -317,8 +408,16 @@ private struct FolderPicker: UIViewControllerRepresentable {
     }
 }
 
+private enum EditorEdge { case top, bottom }
+private struct EditorScrollRequest {
+    let id = UUID()
+    let edge: EditorEdge
+}
+
 private struct NativeTextEditor: UIViewRepresentable {
     @Binding var text: String
+    let blockID: UUID
+    let scrollRequest: EditorScrollRequest?
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
     func makeUIView(context: Context) -> UITextView {
         let editor = UITextView()
@@ -354,18 +453,47 @@ private struct NativeTextEditor: UIViewRepresentable {
         return editor
     }
     func updateUIView(_ view: UITextView, context: Context) {
+        let changedBlock = context.coordinator.blockID != blockID
+        if changedBlock {
+            view.unmarkText()
+            view.findInteraction?.dismissFindNavigator()
+            view.undoManager?.removeAllActions()
+        }
         context.coordinator.parent = self
-        if view.text != text {
+        context.coordinator.blockID = blockID
+        if changedBlock || view.text != text {
             let selection = view.selectedRange
             view.text = text
             let count = (text as NSString).length
-            view.selectedRange = NSRange(location: min(selection.location, count), length: min(selection.length, max(0, count - selection.location)))
+            view.selectedRange = changedBlock ? NSRange(location: 0, length: 0) : NSRange(location: min(selection.location, count), length: min(selection.length, max(0, count - selection.location)))
+        }
+        if changedBlock || context.coordinator.scrollRequestID != scrollRequest?.id {
+            context.coordinator.scrollRequestID = scrollRequest?.id
+            context.coordinator.scroll(to: scrollRequest?.edge ?? .top, in: view)
         }
     }
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: NativeTextEditor
         weak var editor: UITextView?
+        var blockID: UUID?
+        var scrollRequestID: UUID?
         init(parent: NativeTextEditor) { self.parent = parent }
+        func scroll(to edge: EditorEdge, in view: UITextView) {
+            let expectedBlock = blockID
+            let expectedRequest = scrollRequestID
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view, self.blockID == expectedBlock, self.scrollRequestID == expectedRequest else { return }
+                let location = edge == .bottom ? (view.text as NSString).length : 0
+                let range = NSRange(location: location, length: 0)
+                view.selectedRange = range
+                view.layoutIfNeeded()
+                view.scrollRangeToVisible(range)
+                view.layoutIfNeeded()
+                let top = -view.adjustedContentInset.top
+                let y = edge == .bottom ? max(top, view.contentSize.height - view.bounds.height + view.adjustedContentInset.bottom) : top
+                view.setContentOffset(CGPoint(x: 0, y: y), animated: true)
+            }
+        }
         func textViewDidChange(_ textView: UITextView) { parent.text = textView.text }
         @objc func undo() { editor?.undoManager?.undo() }
         @objc func redo() { editor?.undoManager?.redo() }
