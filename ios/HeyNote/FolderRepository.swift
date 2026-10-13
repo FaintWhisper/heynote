@@ -114,7 +114,7 @@ actor FolderRepository {
             }
             if let coordinationError { throw coordinationError }
             if let accessError { throw accessError }
-            return entries.sorted { BufferEntry.precedes($0, $1, oldestFirst: true) }
+            return entries.sorted { BufferEntry.precedes($0, $1, oldestFirst: false) }
         }
     }
 

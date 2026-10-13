@@ -21,7 +21,8 @@ struct HeyNoteApp: App {
 
 private struct LibraryScreen: View {
     @EnvironmentObject var model: AppModel
-    @AppStorage("HeyNote.buffersOldestFirst.v1") private var oldestFirst = true
+    @AppStorage("HeyNote.buffersOldestFirst.v2") private var oldestFirst = false
+    @AppStorage("HeyNote.blocksLastFirst.v1") private var blocksLastFirst = true
     @State private var path: [BufferRoute] = []
     @State private var search = ""
     @State private var chooseFolder = false
@@ -42,7 +43,9 @@ private struct LibraryScreen: View {
     private var orderedHits: [BufferSearchHit] {
         let positions = Dictionary(uniqueKeysWithValues: orderedBuffers.enumerated().map { ($0.element.id, $0.offset) })
         return model.searchHits.sorted {
-            if $0.bufferID == $1.bufferID { return $0.blockIndex < $1.blockIndex }
+            if $0.bufferID == $1.bufferID {
+                return blocksLastFirst ? $0.blockIndex > $1.blockIndex : $0.blockIndex < $1.blockIndex
+            }
             let left = positions[$0.bufferID] ?? Int.max
             let right = positions[$1.bufferID] ?? Int.max
             if left != right { return left < right }
@@ -298,6 +301,7 @@ private struct BlockFramesPreference: PreferenceKey {
 
 private struct BufferScreen: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage("HeyNote.blocksLastFirst.v1") private var blocksLastFirst = true
     let initialHit: BufferSearchHit?
     let initialQuery: String
     @State private var search = ""
@@ -307,10 +311,11 @@ private struct BufferScreen: View {
     @State private var openedInitialHit = false
 
     private var blocks: [(Int, NoteBlock)] {
-        (model.document?.blocks ?? []).enumerated().compactMap { index, block in
+        let matching: [(Int, NoteBlock)] = (model.document?.blocks ?? []).enumerated().compactMap { index, block in
             search.isEmpty || block.text.bufferMatch(search) != nil || block.language.bufferMatch(search) != nil
                 ? (index + 1, block) : nil
         }
+        return blocksLastFirst ? Array(matching.reversed()) : matching
     }
 
     var body: some View {
@@ -333,6 +338,8 @@ private struct BufferScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
+                BlockSortMenu()
+                    .disabled(model.document == nil || model.isOpening)
                 Button { Task { await model.save() } } label: { Image(systemName: "square.and.arrow.down") }
                     .accessibilityLabel("Save buffer")
                     .disabled(!model.dirty || model.busy || model.hasConflict)
@@ -402,7 +409,7 @@ private struct BufferScreen: View {
                         }
                         if visible.isEmpty { Text("No matching blocks.").foregroundStyle(.secondary) }
                     } header: {
-                        Text("\(model.document?.blocks.count ?? 0) blocks")
+                        Text("\(model.document?.blocks.count ?? 0) blocks · \(blocksLastFirst ? "last to first" : "first to last")")
                     } footer: {
                         Text("Tap a block to edit. Hold an arrow to jump to the start or end.")
                     }
@@ -416,6 +423,10 @@ private struct BufferScreen: View {
                     if let first, panelPosition != first { panelPosition = first }
                 }
                 .onChange(of: search) { _ in
+                    panelPosition = visible.first?.1.id
+                    if let id = panelPosition { proxy.scrollTo(id, anchor: .top) }
+                }
+                .onChange(of: blocksLastFirst) { _ in
                     panelPosition = visible.first?.1.id
                     if let id = panelPosition { proxy.scrollTo(id, anchor: .top) }
                 }
@@ -453,6 +464,7 @@ private struct BufferScreen: View {
 private struct BlockEditor: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) var dismiss
+    @AppStorage("HeyNote.blocksLastFirst.v1") private var blocksLastFirst = true
     @State private var currentID: UUID
     @State private var scrollRequest: EditorScrollRequest?
     private let languages = ["text", "markdown", "math", "javascript", "jsx", "typescript", "tsx", "json", "python", "html", "css", "sql", "xml", "yaml", "toml", "shell", "powershell", "swift", "rust", "cpp", "csharp", "java", "golang", "ruby", "php", "clojure", "elixir", "erlang", "kotlin", "lua", "groovy", "diff", "vue", "dart", "scala", "mermaid", "lezer"]
@@ -474,8 +486,9 @@ private struct BlockEditor: View {
     }
 
     private func navigate(_ direction: Int, toEnd: Bool) {
-        guard !model.isOpening, let blocks = model.document?.blocks,
-              let index = blockIndex, !blocks.isEmpty else { return }
+        guard !model.isOpening, let source = model.document?.blocks else { return }
+        let blocks = blocksLastFirst ? Array(source.reversed()) : source
+        guard let index = blocks.firstIndex(where: { $0.id == currentID }), !blocks.isEmpty else { return }
         let target = toEnd ? (direction < 0 ? 0 : blocks.count - 1) : min(max(index + direction, 0), blocks.count - 1)
         guard target != index || toEnd else { return }
         currentID = blocks[target].id
@@ -504,7 +517,8 @@ private struct BlockEditor: View {
                     } label: { Image(systemName: "curlybraces") }
                         .accessibilityLabel("Block language").disabled(block == nil || model.isOpening)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    BlockSortMenu().disabled(model.isOpening)
                     Button("Done") { dismiss() }.fontWeight(.semibold).disabled(model.isOpening)
                 }
             }
@@ -515,6 +529,20 @@ private struct BlockEditor: View {
                                    first: { navigate(-1, toEnd: true) }, last: { navigate(1, toEnd: true) })
             }
         }.interactiveDismissDisabled(model.isOpening)
+    }
+}
+
+private struct BlockSortMenu: View {
+    @AppStorage("HeyNote.blocksLastFirst.v1") private var blocksLastFirst = true
+
+    var body: some View {
+        Menu {
+            Picker("Block order", selection: $blocksLastFirst) {
+                Text("Last to first").tag(true)
+                Text("First to last").tag(false)
+            }
+        } label: { Image(systemName: "arrow.up.arrow.down") }
+            .accessibilityLabel("Sort blocks")
     }
 }
 
@@ -530,13 +558,13 @@ private struct BlockNavigationBar: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                BlockNavigationArrow(symbol: "arrow.up", label: "Previous block", jumpLabel: "Jump to first block and scroll to top",
+                BlockNavigationArrow(symbol: "arrow.up", label: "Previous block", jumpLabel: "Jump to top block",
                                      enabled: enabled, tap: previous, hold: first)
                     .frame(width: 44, height: 44)
                 Spacer()
                 Text(position).font(.caption.monospacedDigit())
                 Spacer()
-                BlockNavigationArrow(symbol: "arrow.down", label: "Next block", jumpLabel: "Jump to last block and scroll to bottom",
+                BlockNavigationArrow(symbol: "arrow.down", label: "Next block", jumpLabel: "Jump to bottom block",
                                      enabled: enabled, tap: next, hold: last)
                     .frame(width: 44, height: 44)
             }
