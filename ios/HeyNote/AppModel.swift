@@ -41,10 +41,10 @@ final class AppModel: ObservableObject {
 
     func connect(_ url: URL) async {
         guard !busy else { return }
-        await save()
-        guard !dirty else { return }
         isOpening = true
         defer { isOpening = false }
+        await save()
+        guard !dirty else { return }
         do {
             folderName = try await repository.connect(url)
             document = nil
@@ -59,10 +59,10 @@ final class AppModel: ObservableObject {
     func open(_ id: String) async -> Bool {
         guard !busy else { return false }
         if activeID == id { return true }
-        await save()
-        guard !dirty else { return false }
         isOpening = true
         defer { isOpening = false }
+        await save()
+        guard !dirty else { return false }
         do {
             let remote = try await repository.read(id)
             let draft = try await repository.loadDraft(id)
@@ -118,7 +118,7 @@ final class AppModel: ObservableObject {
             do {
                 try await Task.sleep(nanoseconds: 300_000_000)
                 guard let self else { return }
-                await self.persistDraft()
+                try await self.persistDraft()
                 try await Task.sleep(nanoseconds: 700_000_000)
                 if !self.hasConflict { await self.save() }
             } catch is CancellationError {
@@ -129,12 +129,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func persistDraft() async {
+    private func persistDraft() async throws {
         guard dirty, let id = activeID, let document else { return }
-        do {
-            let draft = RecoveryDraft(id: id, baseline: baseline, content: try document.data(forSaving: false))
-            try await repository.keepDraft(draft)
-        } catch { message = "Could not keep a recovery draft: \(error.localizedDescription)" }
+        let draft = RecoveryDraft(id: id, baseline: baseline, content: try document.data(forSaving: false))
+        try await repository.keepDraft(draft)
     }
 
     func save() async {
@@ -155,7 +153,7 @@ final class AppModel: ObservableObject {
                 try await repository.keepDraft(RecoveryDraft(id: id, baseline: digest, content: data))
                 try await repository.removeDraft(id)
             } else {
-                await persistDraft()
+                try await persistDraft()
                 scheduleSave()
             }
             message = nil
@@ -248,10 +246,10 @@ final class AppModel: ObservableObject {
     @discardableResult
     func create(name: String) async -> Bool {
         guard !busy else { return false }
-        await save()
-        guard !dirty else { return false }
         isOpening = true
         defer { isOpening = false }
+        await save()
+        guard !dirty else { return false }
         do {
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { throw NoteError.invalidFormat("enter a buffer name.") }
@@ -280,7 +278,8 @@ final class AppModel: ObservableObject {
             await refresh()
         } else {
             let token = UIApplication.shared.beginBackgroundTask(withName: "Save HeyNote edits")
-            await persistDraft()
+            do { try await persistDraft() }
+            catch { message = "Could not keep a recovery draft: \(error.localizedDescription)" }
             await save()
             if token != .invalid { UIApplication.shared.endBackgroundTask(token) }
         }

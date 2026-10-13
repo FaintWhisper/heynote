@@ -47,7 +47,7 @@ jobs:
           cp -R build/HeyNote.xcarchive/Products/Applications/HeyNote.app build/Payload/
           plutil -lint build/Payload/HeyNote.app/Info.plist
           test -x build/Payload/HeyNote.app/HeyNote
-          lipo -verify_arch arm64 build/Payload/HeyNote.app/HeyNote
+          lipo build/Payload/HeyNote.app/HeyNote -verify_arch arm64
           cd build
           /usr/bin/zip -q -r HeyNote-unsigned.ipa Payload
           /usr/bin/unzip -tq HeyNote-unsigned.ipa

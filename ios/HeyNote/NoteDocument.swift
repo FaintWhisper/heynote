@@ -13,7 +13,7 @@ enum NoteError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidFormat(let reason): return "Cannot open this buffer: \(reason)"
+        case .invalidFormat(let reason): return "Invalid HeyNote buffer: \(reason)"
         case .permission: return "Folder access has expired. Choose the HeyNote folder again."
         case .noFolder: return "Choose your HeyNote folder in iCloud Drive first."
         case .invalidPath: return "This file path is not inside the selected folder."

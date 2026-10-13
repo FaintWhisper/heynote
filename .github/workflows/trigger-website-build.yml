@@ -9,6 +9,7 @@ on:
 
 jobs:
   trigger:
+    if: github.repository == 'heyman/heynote'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Website Build
