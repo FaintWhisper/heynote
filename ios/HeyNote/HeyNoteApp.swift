@@ -583,14 +583,14 @@ private struct BlockEditor: View {
                     }
                 } label: {
                     Text(block?.language.capitalized ?? "Text").font(.system(size: 18))
-                        .lineLimit(1).frame(maxWidth: 112, alignment: .leading).padding(.horizontal, 8)
+                        .lineLimit(1).frame(minWidth: 44, alignment: .trailing).padding(.leading, 8)
                 }.accessibilityLabel("Block language").disabled(block == nil || model.isOpening)
+                Spacer(minLength: 8)
                 if let blockIndex {
                     Text("Block \(blockIndex + 1)").font(.system(size: 19, weight: .semibold))
-                        .lineLimit(1).frame(maxWidth: .infinity).padding(.horizontal, 8)
-                } else {
-                    Spacer(minLength: 8)
+                        .lineLimit(1).layoutPriority(1)
                 }
+                Spacer(minLength: 8)
                 Button("Done") { dismiss() }.font(.system(size: 19, weight: .semibold)).disabled(model.isOpening)
             }
             .overlay(alignment: .bottom) { DesignSeparator(leading: 0) }
