@@ -1,7 +1,11 @@
 name: HeyNote
 options:
   bundleIdPrefix: com.faintwhisper
-  preGenCommand: sips -z 1024 1024 ../resources/icon.png --out HeyNote/Assets.xcassets/AppIcon.appiconset/AppIcon.png > /dev/null
+  preGenCommand: |
+    set -eu
+    for size in 20 29 40 58 60 76 80 87 120 152 167 180 1024; do
+      sips -z "$size" "$size" AppIcon.png --out "HeyNote/Assets.xcassets/AppIcon.appiconset/icon-${size}.png" > /dev/null
+    done
   deploymentTarget:
     iOS: '16.0'
 settings:
@@ -9,7 +13,7 @@ settings:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1,2'
     CODE_SIGNING_ALLOWED: NO
-    MARKETING_VERSION: '1.0.1'
+    MARKETING_VERSION: '1.0.2'
     CURRENT_PROJECT_VERSION: '1'
 targets:
   HeyNote:
