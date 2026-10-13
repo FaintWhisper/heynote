@@ -79,7 +79,7 @@ private struct LibraryScreen: View {
                             .disabled(model.folderName == nil || model.busy)
                     }
                 }
-                Text("HeyNote").font(.system(size: 34, weight: .bold)).tracking(-0.9)
+                Text("HeyNote").font(.system(size: 36, weight: .bold)).tracking(-0.9)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20).padding(.top, 2).padding(.bottom, 10)
                     .background(AppDesign.bar)
@@ -139,8 +139,8 @@ private struct LibraryScreen: View {
                 searchReload = UUID()
             }
             Text("\(model.buffers.count) buffers · \(model.folderName ?? "HeyNote")")
-                .font(.system(size: 12)).foregroundStyle(AppDesign.secondary)
-                .frame(maxWidth: .infinity).frame(height: 36)
+                .font(.system(size: 14)).foregroundStyle(AppDesign.secondary)
+                .frame(maxWidth: .infinity).frame(height: 40)
                 .background(AppDesign.bar)
                 .overlay(alignment: .top) { DesignSeparator(leading: 0) }
         }
@@ -169,7 +169,7 @@ private struct LibraryScreen: View {
                     }
             }
             if entries.isEmpty {
-                Text("No .txt buffers in this folder.").font(.system(size: 15))
+                Text("No .txt buffers in this folder.").font(.system(size: 17))
                     .foregroundStyle(AppDesign.secondary).padding(24)
             }
         }
@@ -198,25 +198,25 @@ private struct LibraryScreen: View {
                     .foregroundStyle(AppDesign.accent).frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(title).font(.system(size: 17, weight: .semibold)).tracking(-0.25)
+                        Text(title).font(.system(size: 19, weight: .semibold)).tracking(-0.25)
                             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                         if let date = entry.modified {
                             Text(date.formatted(.dateTime.month(.abbreviated).day()))
-                                .font(.system(size: 13)).foregroundStyle(AppDesign.secondary)
+                                .font(.system(size: 15)).foregroundStyle(AppDesign.secondary)
                                 .fixedSize().accessibilityLabel("Modified \(date.formatted(date: .abbreviated, time: .shortened))")
                         }
                     }
                     Text((showFilename ? entry.id + ", " : "") + count + size)
-                        .font(.system(size: 13)).foregroundStyle(AppDesign.secondary).lineLimit(1)
+                        .font(.system(size: 15)).foregroundStyle(AppDesign.secondary).lineLimit(1)
                     if let error = model.bufferDetailsErrors[entry.id] {
-                        Text(error).font(.system(size: 12)).foregroundStyle(AppDesign.secondary).lineLimit(2)
+                        Text(error).font(.system(size: 14)).foregroundStyle(AppDesign.secondary).lineLimit(2)
                     }
                 }
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppDesign.secondary.opacity(0.45))
             }
             .foregroundStyle(AppDesign.text)
-            .padding(.horizontal, 14).padding(.vertical, 11).frame(minHeight: 64)
+            .padding(.horizontal, 14).padding(.vertical, 11).frame(minHeight: 72)
         }.buttonStyle(DesignRowStyle()).disabled(model.busy)
     }
 
@@ -234,7 +234,7 @@ private struct LibraryScreen: View {
                     Text("\(model.searchHits.count) matching blocks in \(Set(model.searchHits.map(\.bufferID)).count) buffers")
                 }
             }
-            .font(.system(size: 13)).foregroundStyle(AppDesign.secondary)
+            .font(.system(size: 15)).foregroundStyle(AppDesign.secondary)
             .padding(.horizontal, 4).padding(.bottom, 16)
             if !filtered.isEmpty {
                 DesignSectionLabel("Buffer names")
@@ -251,7 +251,7 @@ private struct LibraryScreen: View {
                     }
                     if model.searchHits.isEmpty, !model.isSearching, model.searchError == nil {
                         Text(model.searchFailures.isEmpty ? "No matching block content." : "No matches in the buffers that could be searched.")
-                            .font(.system(size: 15)).foregroundStyle(AppDesign.secondary).padding(24)
+                            .font(.system(size: 17)).foregroundStyle(AppDesign.secondary).padding(24)
                     }
                 }
                 if !model.searchFailures.isEmpty {
@@ -260,7 +260,7 @@ private struct LibraryScreen: View {
                         ForEach(model.searchFailures) { failure in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(failure.id).font(.system(size: 14))
-                                Text(failure.message).font(.system(size: 12)).foregroundStyle(AppDesign.secondary)
+                                Text(failure.message).font(.system(size: 14)).foregroundStyle(AppDesign.secondary)
                             }.padding(15)
                         }
                     }
@@ -280,13 +280,13 @@ private struct LibraryScreen: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 9) {
-                    Text(hit.bufferName).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                    Text(hit.bufferName).font(.system(size: 17, weight: .semibold)).lineLimit(1)
                     Spacer()
-                    Text("Block \(hit.blockIndex + 1)").font(.system(size: 12).monospacedDigit())
+                    Text("Block \(hit.blockIndex + 1)").font(.system(size: 14).monospacedDigit())
                         .foregroundStyle(AppDesign.secondary)
                 }
                 HighlightedPreview(text: hit.excerpt, query: query, lines: 3)
-                Text("\(hit.bufferID) · \(hit.language)").font(.system(size: 12))
+                Text("\(hit.bufferID) · \(hit.language)").font(.system(size: 14))
                     .foregroundStyle(AppDesign.secondary).lineLimit(1)
             }.foregroundStyle(AppDesign.text).padding(.horizontal, 15).padding(.vertical, 13)
         }.buttonStyle(DesignRowStyle()).disabled(model.busy)
@@ -304,7 +304,7 @@ private struct LibraryScreen: View {
             Text("Use the same Apple Account on this device and your computer.")
                 .font(.footnote).foregroundStyle(AppDesign.secondary).multilineTextAlignment(.center)
             Spacer()
-            Text("HeyNote by Jonatan Heyman · iOS companion").font(.system(size: 12)).foregroundStyle(AppDesign.secondary)
+            Text("HeyNote by Jonatan Heyman · iOS companion").font(.system(size: 14)).foregroundStyle(AppDesign.secondary)
         }.padding(28)
     }
 }
@@ -313,6 +313,7 @@ private struct HighlightedPreview: View {
     let text: String
     var query = ""
     var lines = 4
+    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat = 17
     private var highlighted: AttributedString {
         var value = AttributedString(text)
         if !query.isEmpty, let range = text.bufferMatch(query), let match = Range(range, in: value) {
@@ -321,7 +322,7 @@ private struct HighlightedPreview: View {
         return value
     }
     var body: some View {
-        Text(highlighted).font(.system(size: 13.5, design: .monospaced)).lineSpacing(4)
+        Text(highlighted).font(.system(size: fontSize, design: .monospaced)).lineSpacing(4)
             .lineLimit(lines).frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -331,7 +332,7 @@ private struct MessageBanner: View {
     var body: some View {
         if let message = model.message {
             HStack(alignment: .top, spacing: 12) {
-                Text(message).font(.system(size: 13)).lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading)
+                Text(message).font(.system(size: 15)).lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading)
                 Button { model.message = nil } label: { Image(systemName: "xmark") }
                     .accessibilityLabel("Dismiss message").foregroundStyle(AppDesign.accent)
             }.padding(.vertical, 12).padding(.horizontal, 16).background(AppDesign.selection)
@@ -378,7 +379,7 @@ private struct BufferScreen: View {
                 Button { dismiss() } label: {
                     HStack(spacing: 2) {
                         Image(systemName: "chevron.left").font(.system(size: 20, weight: .medium))
-                        Text("HeyNote").font(.system(size: 17))
+                        Text("HeyNote").font(.system(size: 19))
                     }
                 }.accessibilityLabel("Back to HeyNote")
                 Spacer()
@@ -466,7 +467,7 @@ private struct BufferScreen: View {
                                     })
                             }
                             if visible.isEmpty {
-                                Text("No matching blocks.").font(.system(size: 15))
+                                Text("No matching blocks.").font(.system(size: 17))
                                     .foregroundStyle(AppDesign.secondary).padding(24)
                             }
                         }
@@ -505,12 +506,16 @@ private struct BufferScreen: View {
         Button { selection = BlockSelection(id: block.id) } label: {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
-                    Text(block.language).font(.system(size: 12, design: .monospaced))
+                    Text(block.language).font(.system(size: 14, design: .monospaced))
                     Spacer()
-                    Text("\(index)").font(.system(size: 12).monospacedDigit())
+                    Text("\(index)").font(.system(size: 14).monospacedDigit())
                 }.foregroundStyle(AppDesign.secondary)
-                HighlightedPreview(text: block.preview, query: search)
-                    .foregroundStyle(AppDesign.text)
+                if block.isMarkdown {
+                    MarkdownBlockPreview(text: block.preview).equatable()
+                } else {
+                    HighlightedPreview(text: block.preview, query: search)
+                        .foregroundStyle(AppDesign.text)
+                }
             }.padding(.horizontal, 15).padding(.vertical, 13)
         }.buttonStyle(DesignRowStyle())
     }
@@ -523,13 +528,16 @@ private struct BlockEditor: View {
     @StateObject private var controls = EditorControls()
     @State private var currentID: UUID
     @State private var scrollRequest: EditorScrollRequest?
+    @State private var editing: Bool
     private let languages = ["text", "markdown", "math", "javascript", "jsx", "typescript", "tsx", "json", "python", "html", "css", "sql", "xml", "yaml", "toml", "shell", "powershell", "swift", "rust", "cpp", "csharp", "java", "golang", "ruby", "php", "clojure", "elixir", "erlang", "kotlin", "lua", "groovy", "diff", "vue", "dart", "scala", "mermaid", "lezer"]
     private var block: NoteBlock? { model.document?.blocks.first(where: { $0.id == currentID }) }
     private var blockIndex: Int? { model.document?.blocks.firstIndex(where: { $0.id == currentID }) }
+    private var showingSource: Bool { block?.isMarkdown != true || editing }
 
     init(id: UUID, query: String = "") {
         _currentID = State(initialValue: id)
         _scrollRequest = State(initialValue: query.isEmpty ? nil : EditorScrollRequest(target: .match(query)))
+        _editing = State(initialValue: !query.isEmpty)
     }
 
     private var editor: some View {
@@ -557,35 +565,54 @@ private struct BlockEditor: View {
                         Button(language.capitalized) { model.setLanguage(language, id: currentID) }
                     }
                 } label: {
-                    Text(block?.language.capitalized ?? "Text").font(.system(size: 16))
+                    Text(block?.language.capitalized ?? "Text").font(.system(size: 18))
                         .lineLimit(1).frame(minWidth: 80, alignment: .leading).padding(.horizontal, 8)
                 }.accessibilityLabel("Block language").disabled(block == nil || model.isOpening)
                 Spacer()
                 BlockSortMenu().disabled(model.isOpening)
-                Button("Done") { dismiss() }.font(.system(size: 17, weight: .semibold)).disabled(model.isOpening)
+                Button("Done") { dismiss() }.font(.system(size: 19, weight: .semibold)).disabled(model.isOpening)
             }
             .overlay(alignment: .bottom) { DesignSeparator(leading: 0) }
             MessageBanner()
-            if block != nil { editor }
-            else {
+            if block?.isMarkdown == true {
+                Picker("Block view", selection: $editing) {
+                    Text("Read").tag(false)
+                    Text("Edit").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 12)
+                .background(AppDesign.bar)
+                .disabled(model.isOpening)
+            }
+            if let block {
+                ZStack {
+                    editor.opacity(showingSource ? 1 : 0)
+                        .allowsHitTesting(showingSource).accessibilityHidden(!showingSource)
+                    if !showingSource {
+                        MarkdownBlockReader(text: block.text, blockID: currentID, scrollRequest: scrollRequest)
+                    }
+                }
+            } else {
                 Text("This block changed in iCloud Drive. Close the editor and reopen it.")
                     .foregroundStyle(AppDesign.secondary).padding().frame(maxHeight: .infinity)
             }
-            HStack(spacing: 2) {
-                Button { controls.tab() } label: { Image(systemName: "arrow.right.to.line") }
-                    .accessibilityLabel("Insert tab")
-                Button { controls.undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                    .accessibilityLabel("Undo").disabled(!controls.canUndo)
-                Button { controls.redo() } label: { Image(systemName: "arrow.uturn.forward") }
-                    .accessibilityLabel("Redo").disabled(!controls.canRedo)
-                Spacer(minLength: 4)
-                Text("\((block?.text.count ?? 0).formatted()) characters")
-                    .font(.system(size: 12).monospacedDigit()).foregroundStyle(AppDesign.secondary)
-                    .lineLimit(1).padding(.trailing, 8)
+            if showingSource {
+                HStack(spacing: 2) {
+                    Button { controls.tab() } label: { Image(systemName: "arrow.right.to.line") }
+                        .accessibilityLabel("Insert tab")
+                    Button { controls.undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                        .accessibilityLabel("Undo").disabled(!controls.canUndo)
+                    Button { controls.redo() } label: { Image(systemName: "arrow.uturn.forward") }
+                        .accessibilityLabel("Redo").disabled(!controls.canRedo)
+                    Spacer(minLength: 4)
+                    Text("\((block?.text.count ?? 0).formatted()) characters")
+                        .font(.system(size: 14).monospacedDigit()).foregroundStyle(AppDesign.secondary)
+                        .lineLimit(1).padding(.trailing, 8)
+                }
+                .buttonStyle(EditorToolStyle()).padding(.horizontal, 8).frame(height: 42)
+                .background(AppDesign.bar).overlay(alignment: .top) { DesignSeparator(leading: 0) }
+                .disabled(block == nil || model.isOpening)
             }
-            .buttonStyle(EditorToolStyle()).padding(.horizontal, 8).frame(height: 42)
-            .background(AppDesign.bar).overlay(alignment: .top) { DesignSeparator(leading: 0) }
-            .disabled(block == nil || model.isOpening)
             BlockNavigationBar(position: blockIndex.map { "Block \($0 + 1) of \(model.document?.blocks.count ?? 0)" } ?? "Block unavailable",
                                enabled: block != nil && !model.isOpening,
                                previous: { navigate(-1, toEnd: false) }, next: { navigate(1, toEnd: false) },
@@ -594,6 +621,19 @@ private struct BlockEditor: View {
         .foregroundStyle(AppDesign.text)
         .background(AppDesign.bar.ignoresSafeArea())
         .interactiveDismissDisabled(model.isOpening)
+        .onAppear { if block?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true { editing = true } }
+        .onChange(of: currentID) { _ in
+            if block?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true { editing = true }
+        }
+        .onChange(of: editing) { value in
+            if !value { Task { await model.save() } }
+        }
+        .onChange(of: showingSource) { value in
+            if !value {
+                controls.editor?.findInteraction?.dismissFindNavigator()
+                controls.editor?.resignFirstResponder()
+            }
+        }
     }
 }
 
@@ -635,7 +675,7 @@ private struct BlockNavigationBar: View {
                                      enabled: enabled, tap: previous, hold: first)
                     .frame(width: 44, height: 44)
                 Spacer()
-                Text(position).font(.system(size: 13).monospacedDigit()).foregroundStyle(AppDesign.secondary)
+                Text(position).font(.system(size: 15).monospacedDigit()).foregroundStyle(AppDesign.secondary)
                 Spacer()
                 BlockNavigationArrow(symbol: "chevron.down", label: "Next block", jumpLabel: "Jump to bottom block",
                                      enabled: enabled, tap: next, hold: last)
@@ -644,9 +684,9 @@ private struct BlockNavigationBar: View {
             if let status = model.saveStatus {
                 HStack(spacing: 8) {
                     if model.isSaving { ProgressView().controlSize(.mini) }
-                    Text(status).font(.system(size: 12)).foregroundStyle(AppDesign.secondary).lineLimit(2)
+                    Text(status).font(.system(size: 14)).foregroundStyle(AppDesign.secondary).lineLimit(2)
                     if model.dirty, model.message != nil, !model.isSaving, !model.hasConflict {
-                        Button("Save") { Task { await model.save() } }.font(.system(size: 12))
+                        Button("Save") { Task { await model.save() } }.font(.system(size: 14))
                     }
                 }.padding(.horizontal, 15).padding(.bottom, 8)
             }

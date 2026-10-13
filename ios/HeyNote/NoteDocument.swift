@@ -36,6 +36,8 @@ struct NoteBlock: Identifiable, Sendable {
         token.hasSuffix("-a") ? String(token.dropLast(2)) : token
     }
 
+    var isMarkdown: Bool { language == "markdown" }
+
     var preview: String {
         let short = String(text.prefix(240)).trimmingCharacters(in: .whitespacesAndNewlines)
         return short.isEmpty ? "Empty block" : short

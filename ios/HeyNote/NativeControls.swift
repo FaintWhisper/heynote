@@ -55,7 +55,7 @@ struct NativeTextEditor: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let editor = UITextView()
         editor.delegate = context.coordinator
-        editor.font = UIFontMetrics.default.scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
+        editor.font = UIFontMetrics.default.scaledFont(for: .monospacedSystemFont(ofSize: 18, weight: .regular))
         editor.adjustsFontForContentSizeCategory = true
         editor.backgroundColor = AppDesign.raisedUI
         editor.textColor = AppDesign.textUI
@@ -89,7 +89,7 @@ struct NativeTextEditor: UIViewRepresentable {
             let selection = view.selectedRange
             view.text = text
             let paragraph = NSMutableParagraphStyle()
-            paragraph.minimumLineHeight = (view.font?.pointSize ?? 15) * 1.6
+            paragraph.minimumLineHeight = (view.font?.pointSize ?? 18) * 1.6
             paragraph.maximumLineHeight = paragraph.minimumLineHeight
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: view.font!, .foregroundColor: AppDesign.textUI, .paragraphStyle: paragraph

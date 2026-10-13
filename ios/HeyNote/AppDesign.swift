@@ -49,7 +49,7 @@ struct AppChrome<Content: View>: View {
     var body: some View {
         ZStack {
             if let title {
-                Text(title).font(.system(size: 17, weight: .semibold))
+                Text(title).font(.system(size: 19, weight: .semibold))
                     .lineLimit(1).padding(.horizontal, 130)
                     .frame(maxWidth: .infinity).allowsHitTesting(false)
             }
@@ -71,9 +71,9 @@ struct AppSearchField: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 16, weight: .semibold)).foregroundStyle(AppDesign.secondary)
+                .font(.system(size: 18, weight: .semibold)).foregroundStyle(AppDesign.secondary)
             TextField(prompt, text: $text, prompt: Text(prompt).foregroundColor(AppDesign.secondary))
-                .font(.system(size: 16)).foregroundStyle(AppDesign.text)
+                .font(.system(size: 18)).foregroundStyle(AppDesign.text)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
                 .submitLabel(.search).focused($focused)
                 .accessibilityLabel(prompt)
@@ -81,12 +81,12 @@ struct AppSearchField: View {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 18))
                         .foregroundStyle(AppDesign.secondary)
-                        .frame(width: 28, height: 38)
+                        .frame(width: 28, height: 44)
                 }.buttonStyle(.plain).accessibilityLabel("Clear search")
             }
         }
         .padding(.leading, 11).padding(.trailing, 8)
-        .frame(height: 38)
+        .frame(height: 44)
         .background(AppDesign.field, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppDesign.accent, lineWidth: focused ? 2 : 0))
         .padding(.horizontal, 16).padding(.bottom, 12)
@@ -101,7 +101,7 @@ struct DesignSectionLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text).font(.system(size: 13, weight: .semibold))
+        Text(text).font(.system(size: 15, weight: .semibold))
             .foregroundStyle(AppDesign.secondary).frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4).padding(.bottom, 8)
     }
@@ -111,7 +111,7 @@ struct DesignSectionFoot: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text).font(.system(size: 12)).lineSpacing(3)
+        Text(text).font(.system(size: 14)).lineSpacing(3)
             .foregroundStyle(AppDesign.secondary).frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4).padding(.top, 4).padding(.bottom, 14)
     }
