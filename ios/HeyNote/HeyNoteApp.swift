@@ -357,11 +357,12 @@ private struct BufferScreen: View {
     }
 
     private var blockPanel: some View {
-        ScrollViewReader { proxy in
+        let visible = blocks
+        return ScrollViewReader { proxy in
             GeometryReader { viewport in
                 List {
                     Section {
-                        ForEach(blocks, id: \.1.id) { index, block in
+                        ForEach(visible, id: \.1.id) { index, block in
                             blockRow(index, block: block)
                                 .id(block.id)
                                 .background(GeometryReader { row in
@@ -369,7 +370,7 @@ private struct BufferScreen: View {
                                                            value: [block.id: row.frame(in: .named("blockPanel"))])
                                 })
                         }
-                        if blocks.isEmpty { Text("No matching blocks.").foregroundStyle(.secondary) }
+                        if visible.isEmpty { Text("No matching blocks.").foregroundStyle(.secondary) }
                     } header: {
                         Text("\(model.document?.blocks.count ?? 0) blocks")
                     } footer: {
@@ -378,23 +379,23 @@ private struct BufferScreen: View {
                 }
                 .coordinateSpace(name: "blockPanel")
                 .onPreferenceChange(BlockFramesPreference.self) { frames in
-                    let first = blocks.first { _, block in
+                    let first = visible.first { _, block in
                         guard let frame = frames[block.id] else { return false }
                         return frame.maxY > 0 && frame.minY < viewport.size.height
                     }?.1.id
                     if let first, panelPosition != first { panelPosition = first }
                 }
                 .onChange(of: search) { _ in
-                    panelPosition = blocks.first?.1.id
+                    panelPosition = visible.first?.1.id
                     if let id = panelPosition { proxy.scrollTo(id, anchor: .top) }
                 }
                 .onChange(of: selection?.id) { id in
-                    if let id { proxy.scrollTo(id, anchor: .top) }
+                    if let id, visible.contains(where: { $0.1.id == id }) { proxy.scrollTo(id, anchor: .top) }
                 }
                 .searchable(text: $search, prompt: "Search block content")
                 .refreshable { await model.refresh() }
                 .safeAreaInset(edge: .bottom) {
-                    BlockNavigationBar(position: panelLabel, enabled: !blocks.isEmpty && !model.isOpening,
+                    BlockNavigationBar(position: panelLabel, enabled: !visible.isEmpty && !model.isOpening,
                                        previous: { movePanel(-1, toEnd: false, proxy: proxy) },
                                        next: { movePanel(1, toEnd: false, proxy: proxy) },
                                        first: { movePanel(-1, toEnd: true, proxy: proxy) },
