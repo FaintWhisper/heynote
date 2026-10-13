@@ -45,7 +45,6 @@ struct RenderedMarkdown: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-
 struct MarkdownBlockPreview: View, Equatable {
     let text: String
     @ScaledMetric(relativeTo: .body) private var maximumHeight: CGFloat = 136
@@ -53,48 +52,11 @@ struct MarkdownBlockPreview: View, Equatable {
     static func == (left: Self, right: Self) -> Bool { left.text == right.text }
 
     var body: some View {
-        RenderedMarkdown(text: text, fontSize: 17)
+        RenderedMarkdown(text: text, fontSize: 18)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxHeight: maximumHeight, alignment: .top)
             .clipped()
             .allowsHitTesting(false)
             .accessibilityElement(children: .combine)
-    }
-}
-
-struct MarkdownBlockReader: View {
-    let text: String
-    let blockID: UUID
-    let scrollRequest: EditorScrollRequest?
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 1).id("markdownTop")
-                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Empty block").font(.system(size: 18)).foregroundStyle(AppDesign.secondary)
-                    } else {
-                        RenderedMarkdown(text: text).textSelection(.enabled)
-                    }
-                    Color.clear.frame(height: 1).id("markdownBottom")
-                }
-                .padding(.horizontal, 18).padding(.vertical, 16)
-            }
-            .background(AppDesign.raised)
-            .onAppear { scroll(proxy) }
-            .onChange(of: scrollRequest?.id) { _ in scroll(proxy) }
-        }
-        .id(blockID)
-        .accessibilityLabel("Rendered Markdown block")
-    }
-
-    private func scroll(_ proxy: ScrollViewProxy) {
-        let bottom: Bool
-        if case .edge(.bottom)? = scrollRequest?.target { bottom = true }
-        else { bottom = false }
-        DispatchQueue.main.async {
-            proxy.scrollTo(bottom ? "markdownBottom" : "markdownTop", anchor: bottom ? .bottom : .top)
-        }
     }
 }

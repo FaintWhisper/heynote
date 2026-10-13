@@ -32,6 +32,38 @@ jobs:
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
+      - name: Check block operations and source positions
+        run: |
+          set -euo pipefail
+          {
+            cat HeyNote/NoteDocument.swift HeyNote/SourceLineMap.swift
+            cat <<'SWIFT'
+          let original = try Data(contentsOf: URL(fileURLWithPath: "../README.md"))
+          let note = try NoteDocument(data: original)
+          let roundtrip = try note.data(forSaving: false)
+          precondition(roundtrip == original)
+          let first = note.blocks[0]
+          var changed = note
+          guard let duplicate = changed.duplicateBlock(first.id) else { fatalError("Block duplication failed") }
+          precondition(changed.blocks.count == note.blocks.count + 1)
+          precondition(changed.blocks.first(where: { $0.id == duplicate })?.text == first.text)
+          precondition(changed.moveBlock(duplicate, to: 0))
+          precondition(changed.blocks[0].id == duplicate)
+          let encoded = try changed.data(forSaving: true)
+          let parsed = try NoteDocument(data: encoded)
+          precondition(parsed.blocks.count == changed.blocks.count)
+          precondition(parsed.blocks.map(\.text) == changed.blocks.map(\.text))
+          precondition(changed.removeBlock(first.id))
+          precondition(changed.blocks.first(where: { $0.id == duplicate })?.text == first.text)
+          for id in changed.blocks.map(\.id) { precondition(changed.removeBlock(id)) }
+          precondition(changed.blocks.count == 1 && changed.blocks[0].text.isEmpty)
+          let lines = SourceLineMap(first.text)
+          for offset in 0...first.text.utf16.count {
+              precondition(abs(lines.offset(at: lines.line(at: offset)) - offset) <= 1)
+          }
+          print("Block operations and source positions verified.")
+          SWIFT
+          } | swift -
       - name: Archive for iPhone and iPad
         run: |
           set -euo pipefail

@@ -129,6 +129,41 @@ struct NoteDocument {
         return block.id
     }
 
+    @discardableResult
+    mutating func removeBlock(_ id: UUID) -> Bool {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return false }
+        blocks.remove(at: index)
+        if blocks.isEmpty { _ = addBlock() }
+        return true
+    }
+
+    mutating func duplicateBlock(_ id: UUID) -> UUID? {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return nil }
+        if blocks.first?.delimiter.isEmpty == true { blocks[0].delimiter = Self.delimiter(language: blocks[0].token) }
+        let original = blocks[index]
+        let copy = NoteBlock(delimiter: Self.delimiter(language: original.token), token: original.token, text: original.text)
+        blocks.insert(copy, at: index + 1)
+        return copy.id
+    }
+
+    @discardableResult
+    mutating func moveBlock(_ id: UUID, to position: Int) -> Bool {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return false }
+        let target = min(max(position, 0), blocks.count - 1)
+        guard target != index else { return false }
+        let block = blocks.remove(at: index)
+        blocks.insert(block, at: target)
+        return true
+    }
+
+    mutating func appendBlock(_ original: NoteBlock) {
+        if blocks.first?.delimiter.isEmpty == true { blocks[0].delimiter = Self.delimiter(language: blocks[0].token) }
+        var block = original
+        block.id = UUID()
+        if block.delimiter.isEmpty { block.delimiter = Self.delimiter(language: block.token) }
+        blocks.append(block)
+    }
+
     mutating func rename(_ name: String) {
         if metadata == nil { metadata = ["formatVersion": "2.0.0"] }
         metadata?["name"] = name

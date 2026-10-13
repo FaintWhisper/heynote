@@ -198,18 +198,18 @@ private struct LibraryScreen: View {
                     .foregroundStyle(AppDesign.accent).frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(title).font(.system(size: 19, weight: .semibold)).tracking(-0.25)
+                        Text(title).font(.system(size: 20, weight: .semibold)).tracking(-0.25)
                             .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
                         if let date = entry.modified {
                             Text(date.formatted(.dateTime.month(.abbreviated).day()))
-                                .font(.system(size: 15)).foregroundStyle(AppDesign.secondary)
+                                .font(.system(size: 16)).foregroundStyle(AppDesign.secondary)
                                 .fixedSize().accessibilityLabel("Modified \(date.formatted(date: .abbreviated, time: .shortened))")
                         }
                     }
                     Text((showFilename ? entry.id + ", " : "") + count + size)
-                        .font(.system(size: 15)).foregroundStyle(AppDesign.secondary).lineLimit(1)
+                        .font(.system(size: 16)).foregroundStyle(AppDesign.secondary).lineLimit(1)
                     if let error = model.bufferDetailsErrors[entry.id] {
-                        Text(error).font(.system(size: 14)).foregroundStyle(AppDesign.secondary).lineLimit(2)
+                        Text(error).font(.system(size: 15)).foregroundStyle(AppDesign.secondary).lineLimit(2)
                     }
                 }
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
@@ -313,7 +313,7 @@ private struct HighlightedPreview: View {
     let text: String
     var query = ""
     var lines = 4
-    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat = 18
     private var highlighted: AttributedString {
         var value = AttributedString(text)
         if !query.isEmpty, let range = text.bufferMatch(query), let match = Range(range, in: value) {
@@ -364,6 +364,7 @@ private struct BufferScreen: View {
     @State private var panelPosition: UUID?
     @State private var openedInitialHit = false
     @State private var scrolled = false
+    @StateObject private var actions = BlockActionsState()
 
     private var blocks: [(Int, NoteBlock)] {
         let matching: [(Int, NoteBlock)] = (model.document?.blocks ?? []).enumerated().compactMap { index, block in
@@ -411,6 +412,7 @@ private struct BufferScreen: View {
             BlockEditor(id: item.id, query: item.query)
                 .environmentObject(model).tint(AppDesign.accent)
         }
+        .modifier(BlockActionPresentation(actions: actions))
         .alert("Discard this device's edits?", isPresented: $discardEdits) {
             Button("Cancel", role: .cancel) { }
             Button("Load iCloud version", role: .destructive) { Task { await model.useCloudVersion() } }
@@ -517,7 +519,9 @@ private struct BufferScreen: View {
                         .foregroundStyle(AppDesign.text)
                 }
             }.padding(.horizontal, 15).padding(.vertical, 13)
-        }.buttonStyle(DesignRowStyle())
+        }
+        .buttonStyle(DesignRowStyle())
+        .contextMenu { BlockActionButtons(actions: actions, id: block.id) }
     }
 }
 
@@ -526,6 +530,7 @@ private struct BlockEditor: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("HeyNote.blocksLastFirst.v1") private var blocksLastFirst = true
     @StateObject private var controls = EditorControls()
+    @StateObject private var actions = BlockActionsState()
     @State private var currentID: UUID
     @State private var scrollRequest: EditorScrollRequest?
     @State private var editing: Bool
@@ -543,7 +548,17 @@ private struct BlockEditor: View {
     private var editor: some View {
         let id = currentID
         return NativeTextEditor(text: Binding(get: { model.text(for: id) }, set: { model.updateText($0, id: id) }),
-                                blockID: id, scrollRequest: scrollRequest, controls: controls)
+                                blockID: id, scrollRequest: scrollRequest, controls: controls,
+                                supplementalMenu: { actions.menu(for: id, model: model, lastFirst: blocksLastFirst) })
+            .disabled(model.isOpening)
+    }
+
+    private var reader: some View {
+        let id = currentID
+        return MarkdownBlockReader(text: Binding(get: { model.text(for: id) }, set: { model.updateText($0, id: id) }),
+                                   blockID: id, scrollRequest: scrollRequest, controls: controls, active: !showingSource,
+                                   supplementalMenu: { actions.menu(for: id, model: model, lastFirst: blocksLastFirst) },
+                                   error: { model.message = $0 })
             .disabled(model.isOpening)
     }
 
@@ -569,6 +584,8 @@ private struct BlockEditor: View {
                         .lineLimit(1).frame(minWidth: 80, alignment: .leading).padding(.horizontal, 8)
                 }.accessibilityLabel("Block language").disabled(block == nil || model.isOpening)
                 Spacer()
+                Menu { BlockActionButtons(actions: actions, id: currentID) } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Block actions").disabled(block == nil || model.isOpening)
                 BlockSortMenu().disabled(model.isOpening)
                 Button("Done") { dismiss() }.font(.system(size: 19, weight: .semibold)).disabled(model.isOpening)
             }
@@ -584,12 +601,13 @@ private struct BlockEditor: View {
                 .background(AppDesign.bar)
                 .disabled(model.isOpening)
             }
-            if let block {
+            if block != nil {
                 ZStack {
                     editor.opacity(showingSource ? 1 : 0)
                         .allowsHitTesting(showingSource).accessibilityHidden(!showingSource)
-                    if !showingSource {
-                        MarkdownBlockReader(text: block.text, blockID: currentID, scrollRequest: scrollRequest)
+                    if block?.isMarkdown == true {
+                        reader.opacity(showingSource ? 0 : 1)
+                            .allowsHitTesting(!showingSource).accessibilityHidden(showingSource)
                     }
                 }
             } else {
@@ -621,6 +639,7 @@ private struct BlockEditor: View {
         .foregroundStyle(AppDesign.text)
         .background(AppDesign.bar.ignoresSafeArea())
         .interactiveDismissDisabled(model.isOpening)
+        .modifier(BlockActionPresentation(actions: actions))
         .onAppear { if block?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true { editing = true } }
         .onChange(of: currentID) { _ in
             if block?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true { editing = true }
@@ -629,10 +648,10 @@ private struct BlockEditor: View {
             if !value { Task { await model.save() } }
         }
         .onChange(of: showingSource) { value in
-            if !value {
-                controls.editor?.findInteraction?.dismissFindNavigator()
-                controls.editor?.resignFirstResponder()
-            }
+            controls.switchMode(toSource: value)
+        }
+        .onChange(of: model.document?.blocks.map(\.id) ?? []) { ids in
+            if !ids.contains(currentID) { dismiss() }
         }
     }
 }

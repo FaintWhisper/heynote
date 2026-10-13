@@ -214,6 +214,75 @@ final class AppModel: ObservableObject {
         return id
     }
 
+    func deleteBlock(_ id: UUID) {
+        guard !isOpening, document?.removeBlock(id) == true else { return }
+        edited()
+    }
+
+    func duplicateBlock(_ id: UUID) {
+        guard !isOpening, document?.duplicateBlock(id) != nil else { return }
+        edited()
+    }
+
+    func reorderBlock(_ id: UUID, to position: Int) {
+        guard !isOpening, document?.moveBlock(id, to: position) == true else { return }
+        edited()
+    }
+
+    @discardableResult
+    func transferBlock(_ blockID: UUID, to destinationID: String) async -> Bool {
+        guard !busy, !hasConflict, let sourceID = activeID, sourceID != destinationID else { return false }
+        isOpening = true
+        defer { isOpening = false }
+        await save()
+        guard !dirty, !hasConflict, let source = document,
+              let block = source.blocks.first(where: { $0.id == blockID }) else { return false }
+        let capturedRevision = revision
+        var copied = false
+        var moved = false
+        do {
+            let current = try await repository.read(sourceID)
+            guard current.digest == baseline, !current.hasCloudConflict else { throw NoteError.changedOnDisk }
+            guard try await repository.loadDraft(destinationID) == nil else {
+                throw NSError(domain: "HeyNote", code: 2, userInfo: [NSLocalizedDescriptionKey:
+                    "The destination has unsaved edits on this device. Open it and save or resolve those edits first."])
+            }
+            let destination = try await repository.read(destinationID)
+            guard !destination.hasCloudConflict else { throw NoteError.cloudConflict }
+            var appended = destination.document
+            appended.appendBlock(block)
+            _ = try await repository.write(destinationID, data: appended.data(forSaving: true), expectedDigest: destination.digest)
+            copied = true
+            guard revision == capturedRevision, activeID == sourceID else {
+                throw NSError(domain: "HeyNote", code: 3, userInfo: [NSLocalizedDescriptionKey: "The source changed while moving the block."])
+            }
+            var remaining = source
+            remaining.removeBlock(blockID)
+            let digest = try await repository.write(sourceID, data: remaining.data(forSaving: true), expectedDigest: baseline)
+            document = remaining
+            baseline = digest
+            revision += 1
+            dirty = false
+            moved = true
+            autosave?.cancel()
+            try await repository.removeDraft(sourceID)
+            buffers = try await repository.scan()
+            folderVersion = UUID()
+            message = nil
+            return true
+        } catch {
+            if moved {
+                message = "The block was moved, but the library could not refresh: \(error.localizedDescription)"
+                return true
+            }
+            if copied {
+                message = "Copied the block to \(destinationID), but could not remove the original. Both copies are kept. \(error.localizedDescription)"
+            } else { message = error.localizedDescription }
+            if let noteError = error as? NoteError, case .changedOnDisk = noteError { hasConflict = true }
+            return false
+        }
+    }
+
     private func edited() {
         revision += 1
         dirty = true

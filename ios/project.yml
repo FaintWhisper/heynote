@@ -13,12 +13,15 @@ settings:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1,2'
     CODE_SIGNING_ALLOWED: NO
-    MARKETING_VERSION: '1.0.8'
+    MARKETING_VERSION: '1.0.9'
     CURRENT_PROJECT_VERSION: '1'
 packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     exactVersion: '2.4.1'
+  CMark:
+    url: https://github.com/swiftlang/swift-cmark
+    from: '0.4.0'
 targets:
   HeyNote:
     type: application
@@ -28,6 +31,10 @@ targets:
     dependencies:
       - package: MarkdownUI
         product: MarkdownUI
+      - package: CMark
+        product: cmark-gfm
+      - package: CMark
+        product: cmark-gfm-extensions
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.faintwhisper.heynote.ios
