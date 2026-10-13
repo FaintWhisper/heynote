@@ -574,19 +574,23 @@ private struct BlockEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppChrome(title: blockIndex.map { "Block \($0 + 1)" }, height: 56) {
+            AppChrome(height: 56) {
+                Menu { BlockActionButtons(actions: actions, id: currentID) } label: { Image(systemName: "ellipsis.circle") }
+                    .accessibilityLabel("Block actions").disabled(block == nil || model.isOpening)
                 Menu {
                     ForEach(languages, id: \.self) { language in
                         Button(language.capitalized) { model.setLanguage(language, id: currentID) }
                     }
                 } label: {
                     Text(block?.language.capitalized ?? "Text").font(.system(size: 18))
-                        .lineLimit(1).frame(minWidth: 80, alignment: .leading).padding(.horizontal, 8)
+                        .lineLimit(1).frame(maxWidth: 112, alignment: .leading).padding(.horizontal, 8)
                 }.accessibilityLabel("Block language").disabled(block == nil || model.isOpening)
-                Spacer()
-                Menu { BlockActionButtons(actions: actions, id: currentID) } label: { Image(systemName: "ellipsis.circle") }
-                    .accessibilityLabel("Block actions").disabled(block == nil || model.isOpening)
-                BlockSortMenu().disabled(model.isOpening)
+                if let blockIndex {
+                    Text("Block \(blockIndex + 1)").font(.system(size: 19, weight: .semibold))
+                        .lineLimit(1).frame(maxWidth: .infinity).padding(.horizontal, 8)
+                } else {
+                    Spacer(minLength: 8)
+                }
                 Button("Done") { dismiss() }.font(.system(size: 19, weight: .semibold)).disabled(model.isOpening)
             }
             .overlay(alignment: .bottom) { DesignSeparator(leading: 0) }
