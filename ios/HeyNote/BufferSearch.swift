@@ -73,7 +73,7 @@ enum BufferSearchWorker {
         return queue
     }()
 
-    static func run(_ job: BufferSearchJob, query: String) async throws -> BufferSearchFileResult {
+    static func run(_ job: BufferSearchJob, query: String?) async throws -> BufferSearchFileResult {
         try Task.checkCancellation()
         do {
             let index: BufferSearchIndex
@@ -90,6 +90,9 @@ enum BufferSearchWorker {
                 index = try BufferSearchIndex(data: data, defaultName: job.entry.name)
             }
             var report = BufferSearchReport()
+            guard let query else {
+                return BufferSearchFileResult(id: job.entry.id, index: index, report: report)
+            }
             for (blockIndex, block) in index.blocks.enumerated() {
                 try Task.checkCancellation()
                 if blockIndex % 32 == 0 { await Task.yield() }

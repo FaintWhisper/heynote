@@ -27,6 +27,11 @@ struct BufferEntry: Identifiable, Hashable, Sendable {
     }
 }
 
+struct BufferDetails: Sendable {
+    let title: String
+    let blockCount: Int
+}
+
 struct BufferSnapshot {
     let id: String
     let document: NoteDocument
@@ -49,6 +54,7 @@ actor FolderRepository {
     private var searchCacheClock: UInt64 = 0
     private var searchCacheGeneration = UUID()
     private let searchCacheBudget = 32 * 1024 * 1024
+    private var detailsCache: [String: (BufferSearchStamp, BufferDetails)] = [:]
 
     static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -138,8 +144,33 @@ actor FolderRepository {
 
     func clearSearchCache() {
         searchCache.removeAll()
+        detailsCache.removeAll()
         searchCacheCost = 0
         searchCacheGeneration = UUID()
+    }
+
+    func details(for entry: BufferEntry) async throws -> BufferDetails {
+        try Task.checkCancellation()
+        guard let selectedFolder = folder else { throw NoteError.noFolder }
+        if let stamp = entry.searchStamp, let cached = detailsCache[entry.id], cached.0 == stamp {
+            return cached.1
+        }
+        let generation = searchCacheGeneration
+        let cached = searchCache[entry.id]
+        let job = BufferSearchJob(entry: entry, folder: selectedFolder,
+                                  cached: entry.searchStamp != nil && cached?.stamp == entry.searchStamp ? cached?.index : nil,
+                                  local: nil)
+        let result = try await BufferSearchWorker.run(job, query: nil)
+        try Task.checkCancellation()
+        guard folder == selectedFolder, searchCacheGeneration == generation else { throw CancellationError() }
+        guard let index = result.index else {
+            throw NSError(domain: "HeyNote", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                result.report.failures.first?.message ?? NoteError.coordination.localizedDescription])
+        }
+        let details = BufferDetails(title: index.name, blockCount: index.blocks.count)
+        if let stamp = entry.searchStamp { detailsCache[entry.id] = (stamp, details) }
+        cacheSearchIndex(index, entry: entry)
+        return details
     }
 
     private func evictSearchIndex(_ id: String) {
@@ -169,6 +200,7 @@ actor FolderRepository {
         let entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
         let validIDs = Set(entriesByID.keys)
         for id in Array(searchCache.keys) where !validIDs.contains(id) { evictSearchIndex(id) }
+        detailsCache = detailsCache.filter { validIDs.contains($0.key) }
         let generation = searchCacheGeneration
         let jobs = entries.map { entry -> BufferSearchJob in
             let cached = searchCache[entry.id]
@@ -241,6 +273,7 @@ actor FolderRepository {
             guard let result else { throw NoteError.coordination }
             let digest = try result.get()
             evictSearchIndex(id)
+            detailsCache.removeValue(forKey: id)
             searchCacheGeneration = UUID()
             return digest
         }

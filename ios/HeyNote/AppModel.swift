@@ -5,6 +5,8 @@ import UIKit
 final class AppModel: ObservableObject {
     @Published private(set) var folderName: String?
     @Published private(set) var buffers: [BufferEntry] = []
+    @Published private(set) var bufferDetails: [String: BufferDetails] = [:]
+    @Published private(set) var bufferDetailsErrors: [String: String] = [:]
     @Published private(set) var document: NoteDocument?
     @Published private(set) var activeID: String?
     @Published private(set) var dirty = false
@@ -62,6 +64,8 @@ final class AppModel: ObservableObject {
             document = nil
             activeID = nil
             buffers = []
+            bufferDetails = [:]
+            bufferDetailsErrors = [:]
             buffers = try await repository.scan()
             message = nil
         } catch { message = error.localizedDescription }
@@ -97,6 +101,43 @@ final class AppModel: ObservableObject {
 
     func text(for id: UUID) -> String {
         document?.blocks.first(where: { $0.id == id })?.text ?? ""
+    }
+
+    func loadBufferDetails() async {
+        let version = folderVersion
+        let entries = buffers
+        let repository = self.repository
+        let largest = entries.map(\.size).max() ?? 0
+        let limit = largest > 32 * 1024 * 1024 ? 1 : (largest > 16 * 1024 * 1024 ? 2 : 4)
+        let validIDs = Set(entries.map(\.id))
+        bufferDetails = bufferDetails.filter { validIDs.contains($0.key) }
+        bufferDetailsErrors = [:]
+        await withTaskGroup(of: (String, BufferDetails?, String?).self) { group in
+            var next = 0
+            for _ in 0..<min(limit, entries.count) {
+                let entry = entries[next]
+                next += 1
+                group.addTask {
+                    do { return (entry.id, try await repository.details(for: entry), nil) }
+                    catch is CancellationError { return (entry.id, nil, nil) }
+                    catch { return (entry.id, nil, error.localizedDescription) }
+                }
+            }
+            while let (id, details, error) = await group.next() {
+                guard !Task.isCancelled, folderVersion == version else { group.cancelAll(); return }
+                bufferDetails[id] = details
+                bufferDetailsErrors[id] = error
+                if next < entries.count {
+                    let entry = entries[next]
+                    next += 1
+                    group.addTask {
+                        do { return (entry.id, try await repository.details(for: entry), nil) }
+                        catch is CancellationError { return (entry.id, nil, nil) }
+                        catch { return (entry.id, nil, error.localizedDescription) }
+                    }
+                }
+            }
+        }
     }
 
     private func clearSearch() {
