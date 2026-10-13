@@ -7,6 +7,21 @@ struct BufferEntry: Identifiable, Hashable {
     let size: Int
     var name: String { ((id as NSString).lastPathComponent as NSString).deletingPathExtension }
     var directory: String { (id as NSString).deletingLastPathComponent }
+
+    static func precedes(_ first: BufferEntry, _ second: BufferEntry, oldestFirst: Bool) -> Bool {
+        switch (first.modified, second.modified) {
+        case let (left?, right?) where left != right:
+            return oldestFirst ? left < right : left > right
+        case (_?, nil): return true
+        case (nil, _?): return false
+        default:
+            let comparison = first.id.localizedStandardCompare(second.id)
+            if comparison == .orderedSame {
+                return oldestFirst ? first.id < second.id : first.id > second.id
+            }
+            return oldestFirst ? comparison == .orderedAscending : comparison == .orderedDescending
+        }
+    }
 }
 
 struct BufferSnapshot {
@@ -90,11 +105,7 @@ actor FolderRepository {
             }
             if let coordinationError { throw coordinationError }
             if let accessError { throw accessError }
-            return entries.sorted {
-                if $0.id == "main.txt" { return $1.id != "main.txt" }
-                if $1.id == "main.txt" { return false }
-                return $0.id.localizedStandardCompare($1.id) == .orderedAscending
-            }
+            return entries.sorted { BufferEntry.precedes($0, $1, oldestFirst: true) }
         }
     }
 

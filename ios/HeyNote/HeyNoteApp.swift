@@ -21,6 +21,7 @@ struct HeyNoteApp: App {
 
 private struct LibraryScreen: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage("HeyNote.buffersOldestFirst.v1") private var oldestFirst = true
     @State private var path: [BufferRoute] = []
     @State private var search = ""
     @State private var chooseFolder = false
@@ -30,8 +31,23 @@ private struct LibraryScreen: View {
 
     private var query: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    private var orderedBuffers: [BufferEntry] {
+        model.buffers.sorted { BufferEntry.precedes($0, $1, oldestFirst: oldestFirst) }
+    }
+
     private var filtered: [BufferEntry] {
-        model.buffers.filter { query.isEmpty || $0.id.bufferMatch(query) != nil }
+        orderedBuffers.filter { query.isEmpty || $0.id.bufferMatch(query) != nil }
+    }
+
+    private var orderedHits: [BufferSearchHit] {
+        let positions = Dictionary(uniqueKeysWithValues: orderedBuffers.enumerated().map { ($0.element.id, $0.offset) })
+        return model.searchHits.sorted {
+            if $0.bufferID == $1.bufferID { return $0.blockIndex < $1.blockIndex }
+            let left = positions[$0.bufferID] ?? Int.max
+            let right = positions[$1.bufferID] ?? Int.max
+            if left != right { return left < right }
+            return $0.bufferID.localizedStandardCompare($1.bufferID) == .orderedAscending
+        }
     }
 
     var body: some View {
@@ -51,7 +67,15 @@ private struct LibraryScreen: View {
                         .accessibilityLabel("Choose HeyNote folder")
                         .disabled(model.busy)
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Menu {
+                        Picker("File modification date", selection: $oldestFirst) {
+                            Text("Oldest modified first").tag(true)
+                            Text("Newest modified first").tag(false)
+                        }
+                    } label: { Image(systemName: "arrow.up.arrow.down") }
+                        .accessibilityLabel("Sort buffers by file modification date")
+                        .disabled(model.folderName == nil)
                     if model.isOpening {
                         ProgressView()
                     } else {
@@ -125,8 +149,8 @@ private struct LibraryScreen: View {
                     }
                 }
             }
-            Section("Scratchbuffers") {
-                ForEach(model.buffers) { entry in bufferRow(entry) }
+            Section("Scratchbuffers · \(oldestFirst ? "oldest first" : "newest first")") {
+                ForEach(orderedBuffers) { entry in bufferRow(entry) }
                 if model.buffers.isEmpty {
                     Text("No .txt buffers in this folder.").foregroundStyle(.secondary)
                 }
@@ -149,6 +173,12 @@ private struct LibraryScreen: View {
                     }
                     Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
                         .font(.caption).foregroundStyle(.secondary)
+                    if let modified = entry.modified {
+                        Text("Modified \(modified.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Modification date unavailable").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
@@ -179,7 +209,7 @@ private struct LibraryScreen: View {
             }
             if model.searchQuery == query {
                 Section("Content matches") {
-                    ForEach(model.searchHits) { hit in searchRow(hit) }
+                    ForEach(orderedHits) { hit in searchRow(hit) }
                     if model.searchHits.isEmpty, !model.isSearching, model.searchError == nil {
                         Text(model.searchFailures.isEmpty ? "No matching block content." : "No matches in the buffers that could be searched.")
                             .foregroundStyle(.secondary)

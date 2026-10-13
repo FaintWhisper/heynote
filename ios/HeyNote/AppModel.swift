@@ -216,6 +216,11 @@ final class AppModel: ObservableObject {
                 try await persistDraft()
                 scheduleSave()
             }
+            let scanned = try await repository.scan()
+            if buffers != scanned {
+                buffers = scanned
+                folderVersion = UUID()
+            }
             message = nil
         } catch {
             if let noteError = error as? NoteError {
