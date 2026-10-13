@@ -1,0 +1,63 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned sideloadable IPA
+    runs-on: macos-15
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Archive for iPhone and iPad
+        run: |
+          set -euo pipefail
+          xcodebuild -project HeyNote.xcodeproj -scheme HeyNote \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/HeyNote.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" archive
+      - name: Package IPA for signing by a sideloading tool
+        run: |
+          set -euo pipefail
+          mkdir -p build/Payload
+          cp -R build/HeyNote.xcarchive/Products/Applications/HeyNote.app build/Payload/
+          plutil -lint build/Payload/HeyNote.app/Info.plist
+          test -x build/Payload/HeyNote.app/HeyNote
+          lipo -verify_arch arm64 build/Payload/HeyNote.app/HeyNote
+          cd build
+          /usr/bin/zip -q -r HeyNote-unsigned.ipa Payload
+          /usr/bin/unzip -tq HeyNote-unsigned.ipa
+          shasum -a 256 HeyNote-unsigned.ipa > HeyNote-unsigned.ipa.sha256
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: HeyNote-iOS-unsigned
+          path: |
+            ios/build/HeyNote-unsigned.ipa
+            ios/build/HeyNote-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 30

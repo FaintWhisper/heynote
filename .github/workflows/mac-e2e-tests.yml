@@ -1,5 +1,9 @@
 name: Mac e2e Tests
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore: ['ios/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths-ignore: ['ios/**', '.github/workflows/ios.yml']
 
 permissions:
   contents: read

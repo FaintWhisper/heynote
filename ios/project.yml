@@ -1,0 +1,32 @@
+name: HeyNote
+options:
+  bundleIdPrefix: com.faintwhisper
+  preGenCommand: sips -z 1024 1024 ../resources/icon.png --out HeyNote/Assets.xcassets/AppIcon.appiconset/AppIcon.png > /dev/null
+  deploymentTarget:
+    iOS: '16.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1,2'
+    CODE_SIGNING_ALLOWED: NO
+    MARKETING_VERSION: '1.0.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  HeyNote:
+    type: application
+    platform: iOS
+    sources:
+      - HeyNote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.faintwhisper.heynote.ios
+        INFOPLIST_FILE: HeyNote/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+schemes:
+  HeyNote:
+    build:
+      targets:
+        HeyNote: all
+    archive:
+      config: Release

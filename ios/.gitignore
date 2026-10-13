@@ -1,0 +1,4 @@
+build/
+HeyNote.xcodeproj/
+.DS_Store
+HeyNote/Assets.xcassets/AppIcon.appiconset/AppIcon.png
