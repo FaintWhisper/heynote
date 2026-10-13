@@ -20,6 +20,11 @@ struct HeyNoteApp: App {
     }
 }
 
+private struct BufferDetailsRequest: Hashable {
+    let folder: UUID
+    let entries: [BufferEntry]
+}
+
 private struct LibraryScreen: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("HeyNote.buffersOldestFirst.v2") private var oldestFirst = false
@@ -110,7 +115,9 @@ private struct LibraryScreen: View {
             guard path.isEmpty else { return }
             await model.searchAll(search)
         }
-        .task(id: model.folderVersion) { await model.loadBufferDetails() }
+        .task(id: BufferDetailsRequest(folder: model.folderVersion, entries: model.buffers)) {
+            await model.loadBufferDetails()
+        }
         .task {
             await model.start()
             while !Task.isCancelled {
